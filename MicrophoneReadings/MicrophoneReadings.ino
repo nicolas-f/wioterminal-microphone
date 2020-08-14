@@ -30,6 +30,10 @@ ZeroDMAstatus stat;
 DmacDescriptor *desc;
 uint32_t *daddr;
 
+#define AUDIODATA_STATE_EMPTY 0 
+#define AUDIODATA_STATE_FILLED 1 
+int audiodata_state = AUDIODATA_STATE_EMPTY;
+
 void initMic(uint8_t pin0) {
   dma0 = new Adafruit_ZeroDMA;
   stat = dma0->allocate();
@@ -68,7 +72,7 @@ void initMic(uint8_t pin0) {
   //TODO: on SAMD51 lets find an unused timer and use that
   GCLK->PCHCTRL[AUDIO_GCLK_ID].reg = GCLK_PCHCTRL_GEN_GCLK0_Val | (1 << GCLK_PCHCTRL_CHEN_Pos);
 
-    AUDIO_TC->COUNT8.WAVE.reg = TC_WAVE_WAVEGEN_NFRQ;
+  AUDIO_TC->COUNT8.WAVE.reg = TC_WAVE_WAVEGEN_NFRQ;
   
   AUDIO_TC->COUNT8.CTRLA.reg &= ~TC_CTRLA_ENABLE;
   WAIT_TC8_REGS_SYNC(AUDIO_TC)
@@ -113,47 +117,53 @@ void initMic(uint8_t pin0) {
 
 void isr0(Adafruit_ZeroDMA *dma)
 {
-  uint32_t offset;
-  const uint16_t *src, *end;
-  uint16_t *dest;
-
-  //digitalWriteFast(32, HIGH);
-  if (daddr != (uint32_t *)(audio_buffer + AUDIO_BLOCK_SAMPLES / 2)) {
-    // DMA is receiving to the first half of the buffer
-    // need to remove data from the second half
-    src = (uint16_t *)&audio_buffer[AUDIO_BLOCK_SAMPLES/2];
-    end = (uint16_t *)&audio_buffer[AUDIO_BLOCK_SAMPLES];
-    daddr = (uint32_t *)(audio_buffer + AUDIO_BLOCK_SAMPLES / 2);
-  } else {
-    // DMA is receiving to the second half of the buffer
-    // need to remove data from the first half
-    src = (uint16_t *)&audio_buffer[0];
-    end = (uint16_t *)&audio_buffer[AUDIO_BLOCK_SAMPLES/2];
-    //if (update_responsibility) AudioStream::update_all();
-    daddr = (uint32_t *)audio_buffer;
+  if(audiodata_state == AUDIODATA_STATE_EMPTY) {
+    const uint16_t *src, *end;
+    uint16_t *dest;
+    if (daddr != (uint32_t *)(audio_buffer + AUDIO_BLOCK_SAMPLES / 2)) {
+      // DMA is receiving to the first half of the buffer
+      // need to remove data from the second half
+      src = (uint16_t *)&audio_buffer[AUDIO_BLOCK_SAMPLES/2];
+      end = (uint16_t *)&audio_buffer[AUDIO_BLOCK_SAMPLES];
+      daddr = (uint32_t *)(audio_buffer + AUDIO_BLOCK_SAMPLES / 2);
+    } else {
+      // DMA is receiving to the second half of the buffer
+      // need to remove data from the first half
+      src = (uint16_t *)&audio_buffer[0];
+      end = (uint16_t *)&audio_buffer[AUDIO_BLOCK_SAMPLES/2];
+      daddr = (uint32_t *)audio_buffer;
+    }
+    audiodata_offset += AUDIO_BLOCK_SAMPLES/2;
+    if(audiodata_offset == AUDIO_BLOCK_SAMPLES) {
+      audiodata_offset = 0;
+    }
+    dest = (uint16_t *)&(audiodata[audiodata_offset]);    
+    Serial.print("write ");
+    Serial.println(audiodata_offset);
+    do {
+      *dest++ = *src++;
+    } while (src < end);  
+    if(audiodata_offset == AUDIO_BLOCK_SAMPLES/2) {
+      audiodata_state = AUDIODATA_STATE_FILLED;
+      Serial.println("audiodata_state = AUDIODATA_STATE_FILLED;");      
+    }
   }
-
-  offset = audiodata_offset;
-  if (offset > AUDIO_BLOCK_SAMPLES/2) offset = AUDIO_BLOCK_SAMPLES/2;
-  audiodata_offset = offset + AUDIO_BLOCK_SAMPLES/2;
-  dest = (uint16_t *)&(audiodata[offset]);
-  do {
-    *dest++ = *src++;
-  } while (src < end);
-
 }
 
 //------------------------------------
 // END OF AUDIO CODE
  
 void setup() {
-    //pinMode(WIO_MIC, INPUT);
+    Serial.begin(9600);
+    while(!Serial);
+    pinMode(WIO_MIC, INPUT);
+    analogRead(WIO_MIC);    
+    initMic(WIO_MIC);
  
     tft.begin();
     tft.setRotation(3);
     spr.createSprite(TFT_HEIGHT,TFT_WIDTH);
 
-    
 
 }
 
@@ -162,21 +172,17 @@ int micro_delay = 1 / rate * 1e6;
 unsigned long last_fetch = 0;
 
 void loop() {
+    if (audiodata_state != AUDIODATA_STATE_FILLED) { 
+      delay(5);  
+      return;
+    }
+    Serial.println("drawing graph");
     doubles data; //Initilising a doubles type to store data
-    int samples_ar[max_size];
-    for(int samples = 0;  samples < max_size; samples++) {
-      samples_ar[samples] = analogRead(WIO_MIC);
-      delayMicroseconds(micro_delay);
+    for(int i=0; i < AUDIO_BLOCK_SAMPLES; i++) {
+      data.push(audiodata[i]);
     }
-    float sum = 0;
-    for(int i=0; i < max_size; i++) {
-      sum += samples_ar[i];
-    }
-    float avg = sum / max_size;
-    float rms = 0;
-    for(int i=0; i < max_size; i++) {
-      data.push(samples_ar[i] - avg);
-    }
+    audiodata_state = AUDIODATA_STATE_EMPTY;
+    Serial.println("audiodata_state = AUDIODATA_STATE_EMPTY;");
     spr.fillSprite(TFT_DARKGREY);
  
     //Settings for the line graph title
@@ -204,6 +210,6 @@ void loop() {
                 .color(TFT_RED) //Setting the color for the line
                 .draw();
  
-    spr.pushSprite(0, 0);    
+    spr.pushSprite(0, 0);        
     delay(500);  
 }

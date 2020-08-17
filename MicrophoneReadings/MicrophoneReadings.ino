@@ -138,8 +138,7 @@ void isr0(Adafruit_ZeroDMA *dma)
       audiodata_offset = 0;
     }
     dest = (uint16_t *)&(audiodata[audiodata_offset]);    
-    Serial.print("write ");
-    Serial.println(audiodata_offset);
+
     do {
       *dest++ = *src++;
     } while (src < end);  
@@ -155,9 +154,7 @@ void isr0(Adafruit_ZeroDMA *dma)
  
 void setup() {
     Serial.begin(9600);
-    while(!Serial);
-    pinMode(WIO_MIC, INPUT);
-    analogRead(WIO_MIC);    
+    // while(!Serial); 
     initMic(WIO_MIC);
  
     tft.begin();
@@ -173,16 +170,13 @@ unsigned long last_fetch = 0;
 
 void loop() {
     if (audiodata_state != AUDIODATA_STATE_FILLED) { 
-      delay(5);  
       return;
     }
-    Serial.println("drawing graph");
     doubles data; //Initilising a doubles type to store data
     for(int i=0; i < AUDIO_BLOCK_SAMPLES; i++) {
       data.push(audiodata[i]);
     }
     audiodata_state = AUDIODATA_STATE_EMPTY;
-    Serial.println("audiodata_state = AUDIODATA_STATE_EMPTY;");
     spr.fillSprite(TFT_DARKGREY);
  
     //Settings for the line graph title

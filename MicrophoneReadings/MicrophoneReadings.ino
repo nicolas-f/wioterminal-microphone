@@ -1,3 +1,25 @@
+
+//High pass butterworth filter order=1 alpha1=0.0125 
+class  FilterBuHp1
+{
+  public:
+    FilterBuHp1()
+    {
+      v[0]=0.0;
+    }
+  private:
+    float v[2];
+  public:
+    float step(float x) //class II 
+    {
+      v[0] = v[1];
+      v[1] = (9.621952458291035404e-1 * x)
+         + (0.92439049165820696974 * v[0]);
+      return 
+         (v[1] - v[0]);
+    }
+};
+FilterBuHp1 filter;
 #include"seeed_line_chart.h" //include the library
 #include <math.h>
 
@@ -35,6 +57,7 @@ uint32_t *daddr;
 int audiodata_state = AUDIODATA_STATE_EMPTY;
 
 void initMic(uint8_t pin0) {
+  analogRead(pin0);
   dma0 = new Adafruit_ZeroDMA;
   stat = dma0->allocate();
   pinPeripheral(pin0, PIO_ANALOG);
@@ -174,7 +197,7 @@ void loop() {
     }
     doubles data; //Initilising a doubles type to store data
     for(int i=0; i < AUDIO_BLOCK_SAMPLES; i++) {
-      data.push(audiodata[i]);
+      data.push(filter.step(audiodata[i]));
     }
     audiodata_state = AUDIODATA_STATE_EMPTY;
     spr.fillSprite(TFT_DARKGREY);

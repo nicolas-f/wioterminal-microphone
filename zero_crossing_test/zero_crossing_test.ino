@@ -26,7 +26,7 @@
 //200 37500.0
 //240 31250.0
 //250 30000.0
-#define AUDIO_TC_FREQ 30
+#define AUDIO_TC_FREQ 160
 
 #define max_size 50 //maximum size of data
 
@@ -257,7 +257,9 @@ void loop() {
   if(now - lastPrint > 1000) {
     Serial.print("Got ");
     Serial.print(secondZeroCross - firstZeroCross);
-    Serial.print(" samples between each zero crossing (at ");
+    Serial.print(" samples (tone ");
+    Serial.print((AUDIO_CLKRATE / AUDIO_TC_FREQ) / (secondZeroCross - firstZeroCross));
+    Serial.print(" Hz) between each zero crossing (rate ");
     Serial.print(AUDIO_CLKRATE / AUDIO_TC_FREQ);
     Serial.println(" Hz)");
     lastPrint = now;
